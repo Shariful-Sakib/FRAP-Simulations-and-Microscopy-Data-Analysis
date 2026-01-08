@@ -24,7 +24,7 @@ In this repository are Python programs that simulate Fluorescence Recovery After
   - A collision is handled by calculating the following d′ = d − 2(n − r)(n_unit/n) such that the new position is calculated by taking the current uncorrected collision and subtracting 2 times the distance from the membrane (n-r) multiplied by the unit vector normal to the membrane at the collision point (n_unit/n).
 
 - Microscopy data acquisition is simulated by analyzing the fluorescence (number of point particles) periodically with **frame_interval**s (typically 30 ms). Two methods are used to analyze the fluorescence:
-  - Bleach region analysis where the count of fluorophores in the bleached and unbleached regions are tracked every frame interval. At the end of the simulation, the characteristic half-time of recovery is calculated by fitting the fluorescence over time data with an exponential decay function
+  - Bleach region analysis where the count of fluorophores in the bleached and unbleached regions are tracked every frame interval. At the end of the simulation, the characteristic recovery time is calculated by fitting the fluorescence over time data with an exponential decay function
   - Fourier profile analysis where the count of fluorophores along columns of the compartment (along the x-axis for convenience in this simulation) sectioned by a resolution of 85 nm is observed every frame interval. The value is then fit with a cosine function i(x, t) = a_1(t) cos(πx/L), then at the end of the simulation, the amplitudes of that first Fourier mode, a_1(t), is then fit to an exponential function, a_{1,0}e^{−t/τ} + a_{1,i}  
 
 # Automated Zeiss microscopy image processing and data analysis using PyImageJ 
