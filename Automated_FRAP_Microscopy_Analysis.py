@@ -343,6 +343,9 @@ for folders in glob.iglob(directory, recursive= True):
         sorted_files = sorted(sorted(glob.iglob(folders + f'/**/*.{extensions}', recursive= True), key=extract_float))
         #fileCount = 98 #for skipping
         for files in (sorted_files):
+            if len(os.listdir(files)) == False:
+                fileCount += 1
+                continue #if a folder is empty, skip it
             print(files)
             dataDict = defaultdict(list); #makes a dictionary for metadata values
             macro_arguments = {"directory": files, "ID": fileCount, "BLEACH_REGION_ANALYSIS": BLEACH_REGION_ANALYSIS, "PROFILE_ANALYSIS": PROFILE_ANALYSIS} #dictionary of arguments sent to ImageJ macro.
@@ -455,7 +458,7 @@ for folders in glob.iglob(directory, recursive= True):
                         for testTau in (np.arange(0.1, 0.51, 0.1)):
                             optimalValues, covarianceMatrix = curve_fit(modelDict[plotCount], varDict[plotCount].iloc[dataDict['bleachTimeIndex'][0]:,0],
                                                                         varDict[plotCount].iloc[dataDict['bleachTimeIndex'][0]:,1],
-                                                                        p0=[50, 50, testTau], maxfev=10000)
+                                                                        p0=[0.50, 0.50, testTau], maxfev=10000)
                             c1_opt, c2_opt, 𝜏_opt = optimalValues
                             if 𝜏_opt >= dataDict['frameTime'][0]:
                                 break

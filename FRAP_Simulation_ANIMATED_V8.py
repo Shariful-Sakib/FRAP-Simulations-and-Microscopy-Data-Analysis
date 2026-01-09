@@ -41,23 +41,23 @@ plt.close("all")
 # For spirilla, set shape >= 2 and you can vary everything.
 # Finally, change any other setting for the FRAP experiment.
 
-shape = 1# 0 = sphere, 1 = rod, 2 = helical cell
+shape = 2# 0 = sphere, 1 = rod, 2 = helical cell
 shapeDict = {0: "sphere", 1:"rod", 2:"helical cell"}
 shapeName = shapeDict[shape]
 internal_radius = 0.27 #um
-length = 4.62 #um
+length = 0.6 #um
 pitch = 2.5#um
-amplitude = 0.2 #um
+amplitude = 2 #um
 contourLength = (length - internal_radius*2) * math.sqrt(1 + (2*math.pi*amplitude/pitch)**2) + internal_radius*2
 # temp = 5
-scale_factor = 3#max(3.5 * length / 5, 1)   #for graphing purposes
+scale_factor = max(3.5 * length / 5, 1)   #for graphing purposes
 length_correction = internal_radius     #ensures the shape produced is of the correct length
 max_segment_error = 0.0042              #um ~4.2 nm maximum error between true and calculated distances (approximate length of an FP molecule)
 segment_resolution = 2*math.sqrt((max_segment_error + internal_radius)**2 - internal_radius**2)
 pixel_resolution = 0.085                #um 85 nm resolution used for creating plot profiles
 
 numParticles = 1000
-fast_diffusion_constant = 5 # um^2/s
+fast_diffusion_constant = 0.1 # um^2/s
 immobile_diffusion_constant = 0 #um^2/s
 slow_diffusion_constant = 1 # um^2/s
 fast_particle_proportion = 1
@@ -73,14 +73,14 @@ diffusion_constant = np.repeat([np.full(3, fast_diffusion_constant), np.full(3, 
                                [numFastParticles, numSlowParticles, numImmobileParticles], axis=0) #d_c um^2/s #mask of diffusion constants
 np.random.shuffle(diffusion_constant)
 
-simulated_seconds = 2#math.ceil(contourLength**2*((3/4) if length <= 5 else (1/3))/(2*fast_diffusion_constant) + 1)  #sec Simulated total duration of the experiment
+simulated_seconds = 1#math.ceil(contourLength**2*((3/4) if length <= 5 else (1/3))/(2*fast_diffusion_constant) + 1)  #sec Simulated total duration of the experiment
 frame_interval = 0.030 #sec
 simulated_interval = 0.001 #sec
 simulated_range = int((simulated_seconds / frame_interval) * (frame_interval / simulated_interval)) #iterations
 # animated_frames = simulated_range + 100
 
 bleach_duration = frame_interval #s how long should the bleach be
-bleach_start_time = frame_interval * 4 #s what timepoint should the bleach begin
+bleach_start_time = frame_interval * 2 #s what timepoint should the bleach begin
 bleach_end_time = bleach_start_time + bleach_duration
 gamma = 5 #related to laser power
 fluorophore_lifetime = frame_interval / gamma
@@ -173,7 +173,13 @@ def detect_fluorescence(fluorescent_particles):
     inside_compartment_mask = min_distances <= internal_radius
     outside_compartment_mask = ~inside_compartment_mask
     if not bleach_box_scan_size:
-        bleach_region_mask = fluorescent_particles[:,0] <= bleach_region  #Boolean mask of particles on the same side as the bleach region (based on the x-coordinate)
+        if shape == 2 and length <= pitch:
+            bleach_region_mask = ((length-2*internal_radius)*fluorescent_particles[:,0] +
+                                 amplitude*(math.cos(2*math.pi*(length-internal_radius)/pitch) - math.cos(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,1] +
+                                 amplitude*(math.sin(2*math.pi*(length-internal_radius)/pitch) - math.sin(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,2]
+                                 < length/2*(length-2*internal_radius))
+        else:
+            bleach_region_mask = fluorescent_particles[:,0] <= bleach_region  #Boolean mask of particles on the same side as the bleach region (based on the x-coordinate)
     else:
         bleach_region_mask_Left = fluorescent_particles[:,0] >= bleach_region - 0.5 * bleach_box_scan_size 
         bleach_region_mask_Right = fluorescent_particles[:,0] <= bleach_region + 0.5 * bleach_box_scan_size
@@ -289,7 +295,7 @@ def update(frame): # Update the animation
                             s=30, alpha=0.8, label= "Bleach region fluorescence" if frame == 0 else None, edgecolors='black')
             ax_FRAP.scatter(current_simulation_time, FRAP_values[1][-1], color= (255/255, 0/255, 255/255), linewidth=1,
                             s=30, alpha=0.8, label= "Non-Bleach region fluorescence" if frame == 0 else None, edgecolors='black')
-            if shape != 0: #plot profiles not supported for spheres
+            if shape != 0 and Decimal(str(length)) >= Decimal(str(internal_radius*2 + pixel_resolution)): #plot profiles not supported for spheres
                 if current_simulation_time == round(bleach_end_time, 3): [plot_lines.remove() for plot_lines in ax_INTENSITY_PROFILE.lines]
                 fluorescence_profile = (np.count_nonzero((particles_expanded[inside_compartment_mask, 0] >= pixel_intervals)
                                                         & (particles_expanded[inside_compartment_mask, 0] < pixel_intervals + pixel_resolution), axis= 1)) / numParticles  

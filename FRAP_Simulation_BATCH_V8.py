@@ -184,12 +184,18 @@ def collect_data( #These are all the default values
         inside_compartment_mask = min_distances <= internal_radius
         outside_compartment_mask = ~inside_compartment_mask
         
-        if not bleach_box_scan_size:
-            bleach_region_mask = fluorescent_particles[:,0] <= bleach_region  #Boolean mask of particles on the same side as the bleach region (based on the x-coordinate)
+        if not bleach_box_scan_size:     
+            if shape == 2 and length <= pitch:
+                bleach_region_mask = ((length-2*internal_radius)*fluorescent_particles[:,0] +
+                                     amplitude*(math.cos(2*math.pi*(length-internal_radius)/pitch) - math.cos(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,1] +
+                                     amplitude*(math.sin(2*math.pi*(length-internal_radius)/pitch) - math.sin(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,2]
+                                     < length/2*(length-2*internal_radius))
+            else:
+                bleach_region_mask = fluorescent_particles[:,0] <= bleach_region  #Boolean mask of particles on the same side as the bleach region (based on the x-coordinate)
         else:
-            bleach_region_mask_Left = fluorescent_particles[:,0] >= bleach_region - 0.5 * bleach_box_scan_size 
-            bleach_region_mask_Right = fluorescent_particles[:,0] <= bleach_region + 0.5 * bleach_box_scan_size 
-            bleach_region_mask = np.logical_and(bleach_region_mask_Left, bleach_region_mask_Right) 
+           bleach_region_mask_Left = fluorescent_particles[:,0] >= bleach_region - 0.5 * bleach_box_scan_size 
+           bleach_region_mask_Right = fluorescent_particles[:,0] <= bleach_region + 0.5 * bleach_box_scan_size 
+           bleach_region_mask = np.logical_and(bleach_region_mask_Left, bleach_region_mask_Right) 
             
         Non_bleach_region_mask = ~bleach_region_mask
         bleach_region_particles_mask = np.logical_and(inside_compartment_mask, bleach_region_mask)  #Boolean mask of particles within the bleach region inside the shape compartment

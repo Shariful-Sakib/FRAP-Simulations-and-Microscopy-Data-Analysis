@@ -49,19 +49,19 @@ shape = 2 # 0 = sphere, 1 = rod, 2 = helical cell
 shapeDict = {0: "sphere", 1:"rod", 2:"helical cell"}
 
 internal_radius = 0.27 #um
-length = 4.62 #um
+length = 0.7 #um
 pitch = 2.5#um
 amplitude = 0.2 #um
 contourLength = (length - internal_radius*2) * math.sqrt(1 + (2*math.pi*amplitude/pitch)**2) + internal_radius*2
 
-scale_factor = 3#max(2.64 * length / 5, 1)    #graphing purposes
+scale_factor = max(2.64 * length / 5, 1)    #graphing purposes
 length_correction = internal_radius         #ensures the shape produced is of the correct length
 max_segment_error = 0.0042              #um ~4.2 nm maximum error between true and calculated distances (approximate length of an FP molecule)
 segment_resolution = 2*math.sqrt((max_segment_error + internal_radius)**2 - internal_radius**2)
 pixel_resolution = 0.085                    #um 85 nm resolution used for creating plot profiles
 
 numParticles = 1000
-fast_diffusion_constant = 5 # um^2/s
+fast_diffusion_constant = 0.5 # um^2/s
 immobile_diffusion_constant = 0 #um^2/s
 slow_diffusion_constant = 5 # um^2/s
 fast_particle_proportion = 1
@@ -170,8 +170,15 @@ def detect_fluorescence(fluorescent_particles, min_distances):
     inside_compartment_mask = min_distances <= internal_radius
     outside_compartment_mask = ~inside_compartment_mask
     if not bleach_box_scan_size:
-        bleach_region_mask = fluorescent_particles[:,0] <= bleach_region  #Boolean mask of particles on the same side as the bleach region (based on the x-coordinate)
-    else:
+       if shape == 2 and length <= pitch:
+           bleach_region_mask = ((length-2*internal_radius)*fluorescent_particles[:,0] +
+                                amplitude*(math.cos(2*math.pi*(length-internal_radius)/pitch) - math.cos(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,1] +
+                                amplitude*(math.sin(2*math.pi*(length-internal_radius)/pitch) - math.sin(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,2]
+                                < length/2*(length-2*internal_radius))
+           
+       else:
+           bleach_region_mask = fluorescent_particles[:,0] <= bleach_region  #Boolean mask of particles on the same side as the bleach region (based on the x-coordinate)
+    else:       
         bleach_region_mask_Left = fluorescent_particles[:,0] >= bleach_region - 0.5 * bleach_box_scan_size 
         bleach_region_mask_Right = fluorescent_particles[:,0] <= bleach_region + 0.5 * bleach_box_scan_size
         bleach_region_mask = np.logical_and(bleach_region_mask_Left, bleach_region_mask_Right)      
