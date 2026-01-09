@@ -49,7 +49,7 @@ shape = 2 # 0 = sphere, 1 = rod, 2 = helical cell
 shapeDict = {0: "sphere", 1:"rod", 2:"helical cell"}
 
 internal_radius = 0.27 #um
-length = 0.7 #um
+length = 4.62 #um
 pitch = 2.5#um
 amplitude = 0.2 #um
 contourLength = (length - internal_radius*2) * math.sqrt(1 + (2*math.pi*amplitude/pitch)**2) + internal_radius*2
@@ -61,7 +61,7 @@ segment_resolution = 2*math.sqrt((max_segment_error + internal_radius)**2 - inte
 pixel_resolution = 0.085                    #um 85 nm resolution used for creating plot profiles
 
 numParticles = 1000
-fast_diffusion_constant = 0.5 # um^2/s
+fast_diffusion_constant = 15 # um^2/s
 immobile_diffusion_constant = 0 #um^2/s
 slow_diffusion_constant = 5 # um^2/s
 fast_particle_proportion = 1

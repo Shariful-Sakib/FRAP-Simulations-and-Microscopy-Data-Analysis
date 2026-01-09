@@ -45,19 +45,19 @@ shape = 2# 0 = sphere, 1 = rod, 2 = helical cell
 shapeDict = {0: "sphere", 1:"rod", 2:"helical cell"}
 shapeName = shapeDict[shape]
 internal_radius = 0.27 #um
-length = 0.6 #um
+length = 4.62 #um
 pitch = 2.5#um
-amplitude = 2 #um
+amplitude = 0.2 #um
 contourLength = (length - internal_radius*2) * math.sqrt(1 + (2*math.pi*amplitude/pitch)**2) + internal_radius*2
 # temp = 5
-scale_factor = max(3.5 * length / 5, 1)   #for graphing purposes
+scale_factor = 3#max(3.5 * length / 5, 1)   #for graphing purposes
 length_correction = internal_radius     #ensures the shape produced is of the correct length
 max_segment_error = 0.0042              #um ~4.2 nm maximum error between true and calculated distances (approximate length of an FP molecule)
 segment_resolution = 2*math.sqrt((max_segment_error + internal_radius)**2 - internal_radius**2)
 pixel_resolution = 0.085                #um 85 nm resolution used for creating plot profiles
 
 numParticles = 1000
-fast_diffusion_constant = 0.1 # um^2/s
+fast_diffusion_constant = 5 # um^2/s
 immobile_diffusion_constant = 0 #um^2/s
 slow_diffusion_constant = 1 # um^2/s
 fast_particle_proportion = 1
@@ -80,7 +80,7 @@ simulated_range = int((simulated_seconds / frame_interval) * (frame_interval / s
 # animated_frames = simulated_range + 100
 
 bleach_duration = frame_interval #s how long should the bleach be
-bleach_start_time = frame_interval * 2 #s what timepoint should the bleach begin
+bleach_start_time = frame_interval * 4 #s what timepoint should the bleach begin
 bleach_end_time = bleach_start_time + bleach_duration
 gamma = 5 #related to laser power
 fluorophore_lifetime = frame_interval / gamma
