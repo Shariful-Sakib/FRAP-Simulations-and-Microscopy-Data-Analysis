@@ -173,7 +173,7 @@ def detect_fluorescence(fluorescent_particles):
     inside_compartment_mask = min_distances <= internal_radius
     outside_compartment_mask = ~inside_compartment_mask
     if not bleach_box_scan_size:
-        if shape == 2 and length <= pitch:
+        if shape == 2 and length <= pitch and Decimal(str(length)) > Decimal(str(2*internal_radius)):
             bleach_region_mask = ((length-2*internal_radius)*fluorescent_particles[:,0] +
                                  amplitude*(math.cos(2*math.pi*(length-internal_radius)/pitch) - math.cos(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,1] +
                                  amplitude*(math.sin(2*math.pi*(length-internal_radius)/pitch) - math.sin(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,2]

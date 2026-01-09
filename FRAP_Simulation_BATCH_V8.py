@@ -185,7 +185,7 @@ def collect_data( #These are all the default values
         outside_compartment_mask = ~inside_compartment_mask
         
         if not bleach_box_scan_size:     
-            if shape == 2 and length <= pitch:
+            if shape == 2 and length <= pitch and Decimal(str(length)) > Decimal(str(2*internal_radius)):
                 bleach_region_mask = ((length-2*internal_radius)*fluorescent_particles[:,0] +
                                      amplitude*(math.cos(2*math.pi*(length-internal_radius)/pitch) - math.cos(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,1] +
                                      amplitude*(math.sin(2*math.pi*(length-internal_radius)/pitch) - math.sin(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,2]
@@ -392,10 +392,10 @@ shapes = ([2])
 aspectRatio_array = np.logspace(np.log10(1), np.log10(50), 50) # aspect ratios
 lengths = np.array([])
 internal_radius_batch = None #np.array([0.27])
-diffusions = np.array([15])
+diffusions = np.array([0.5])
 frameRates = np.array([0.030])
 particles = np.array([1000])
-amplitudes = np.array([0.2])#np.arange(0,2+0.01,0.25)
+amplitudes = np.array([0.2,0.5,1,2])#np.arange(0,2+0.01,0.25)
 pitches = np.array([2.5])#np.logspace(np.log10(0.2), np.log10(50), 22)
 # pitches = np.flip(pitches)
 bleach_box_size_batch = None#np.arange(0.5, 4.1, 0.5)
