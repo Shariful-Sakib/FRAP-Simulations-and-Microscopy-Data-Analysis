@@ -28,14 +28,15 @@ import gc
 def FRAP_Model(t, A, C, 𝜏):
    return (A * (1 - C * np.exp(-t / 𝜏)))
 
-def FLAP_Model(t, B, A, 𝜏2):
+def FLAP_Model(t, A, B, 𝜏2):
    return (B * np.exp(-t / 𝜏2) + A)
 
 def COSINE_COLLAPSE_Model(x, I0, I_amplitude):
     return (I0 + (I_amplitude * np.cos(np.pi * x / cell_Length)))
 
 def MASTER_CURVE(cellType, analysisType, cell_Length, internal_radius, 𝜏):
-    a_Dict = {0: 2.221, 2: 5.264}###Dictionary keys correspond to analysis type. 0 = bleach region analysis, 2 = Fourier Transform
+    sphere_Dict = {0: 0.0575, 2: 0.045}###Dictionary keys correspond to analysis type. 0 = bleach region analysis, 2 = Fourier Transform
+    infinity_Dict = {0: 0.954, 2: 1}###Dictionary keys correspond to analysis type. 0 = bleach region analysis, 2 = Fourier Transform
     key = int(analysisType)
     aspect_Ratio = cell_Length / (internal_radius * 2)
 
@@ -46,17 +47,20 @@ def MASTER_CURVE(cellType, analysisType, cell_Length, internal_radius, 𝜏):
         cell_amplitude = 0.2
         cell_pitch = 2.5
 
-    D =  (0.0575 + ((1/np.pi**2)*(1 + (2 * math.pi * cell_amplitude / cell_pitch)**2) - 0.0575) * (1 - np.exp((1 - aspect_Ratio) / a_Dict[key]))) * (cell_Length**2 / 𝜏)
+    D = (sphere_Dict[key] + ((infinity_Dict[key]/np.pi**2)*(1 + (2 * math.pi * cell_amplitude / cell_pitch)**2) - sphere_Dict[key]) * (1 - 1.689/aspect_Ratio + 0.3568/aspect_Ratio**2 + 0.3322/aspect_Ratio**3)) * (cell_Length**2 / 𝜏)
     return D
 # B1(lc/L)^B2
 def extract_float(fileName):
-    match = re.search(r' mNG-(\d+)', fileName)
+    if 'IPTG' in fileName:
+        match = re.search(r'IPTG-(\d+)', fileName)
+    else:
+        match = re.search(r'mNG-(\d+)', fileName)
     return float(match.group(1))   
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 BLEACH_REGION_ANALYSIS = True #User can toggle if they want to analyze the fluorescence in the bleach and non-bleach region
-PROFILE_ANALYSIS = True #User can can toggle if they want to analyze the fluorescence profile 
+FOURIER_MODE_ANALYSIS = True #User can can toggle if they want to analyze the fluorescence profile
 matplotlib.use('Agg')  
 
 option = easygui.ynbox(msg='Please select the folder with the FRAP data in the next pop-up window', title='FRAP Analyzer - User Input Required', choices=('Yes', 'No'), image=None, default_choice='Yes', cancel_choice='No')
@@ -97,7 +101,7 @@ ImageJ_FRAP_Macro = """
 #@ String directory //Receives the files variable from python 
 #@ Integer ID //Receives the fileCount variable from python to act as an ID variable for data organization purposes
 #@ Boolean BLEACH_REGION_ANALYSIS //Receives the boolean variable from python indicating whether the user wants this data to be extracted
-#@ Boolean PROFILE_ANALYSIS //Receives the boolean variable from python indicating whether the user wants this data to be extracted
+#@ Boolean FOURIER_MODE_ANALYSIS //Receives the boolean variable from python indicating whether the user wants this data to be extracted
 
 run("Input/Output...", "jpeg=100 gif=-1 file=.csv use_file copy_column save_column"); //edit output window
 run("Set Measurements...", "area mean centroid feret's integrated redirect=None decimal=4");
@@ -119,7 +123,7 @@ close("CP");
 close("Threshold");
 selectWindow("Results");
 run("Close");
-setBatchMode(false);
+setBatchMode(true);
 //////^^^Closing procedures
 
 function FRAP_DATA_EXTRACTION(directory)
@@ -130,26 +134,30 @@ function FRAP_DATA_EXTRACTION(directory)
     run("Maximize");
     roiManager("Show None");
     
+    
     //////Extract relevant experiment data
     metaData = split(getImageInfo(), "\\n");
     bleachBoxIndex = Array.filter(metaData, "Information|TimelineTrack|TimelineElement|EventInformation|Bleaching|BleachRegion|Name"); //subtract 1 from bleach region to get ROI index
     bleachTimeIndex = Array.filter(metaData, "Experiment|AcquisitionBlock|BleachingSetup|StartIndex"); //gives time index of when bleach occured
     bleachDuration = Array.filter(metaData, "Information|TimelineTrack|TimelineElement|Duration"); //gives the length of bleaching in seconds
-    frameTime = Array.filter(metaData, "Information|Image|T|Interval|Increment"); //gives the time between frames in seconds
+    //frameTime = Array.filter(metaData, "Information|Image|T|Interval|Increment"); //gives the time between frames in seconds
+    frameTime = Array.filter(metaData, "Frame interval:"); //gives the time between frames in seconds
+    frameTime[0] = replace(replace(frameTime[0], ":", " ="), " sec", "");
     laserWavelength = Array.filter(metaData, "Information|Image|Channel|Wavelength"); //gives laser wavelength
     bleachLaserPower = Array.filter(metaData, "Experiment|AcquisitionBlock|BleachingSetup|IntensityThreshold"); //retrieves in percentage of laser power
     acquisitionLaserPower = Array.filter(metaData, "Experiment|AcquisitionBlock|TimeSeriesSetup|MultiTrackSetup|Track|DetectionModeSetup|Zeiss.Micro.LSM.Acquisition.Lsm880ChannelTrackDetectionMode|ParameterCollection|Intensity #03"); //retrieves acquisition laser power
     detectorGain = Array.filter(metaData, "HardwareSetting|ParameterCollection|DetectorGain #7"); //retrieves gain for detector
     experimentTime = Array.filter(metaData, "Information|Image|AcquisitionDateAndTime");  //time image was taken
     bleachBoxRotation = Array.filter(metaData, "Experiment|AcquisitionBlock|ExperimentRegionsSetup|RegionItem|Rotation #1"); //The original rotation of the bleach box during the experiment
+    //bleachBoxRotation = "0.0=0.0";
     width = Array.filter(metaData, "Width:");
     height = Array.filter(metaData, "Height:");
     imageDimensions =  "W x H:" + substring(width[0], indexOf(width[0], " ") + 1) + " x" + substring(height[0], indexOf(height[0], " ") + 1);
     imageDimensions = replace(replace(imageDimensions, "microns", "µm"), ")", " px)");
     
     experimentData = processMetaData(Array.concat(bleachBoxIndex,bleachTimeIndex,bleachDuration,frameTime,laserWavelength,bleachLaserPower,acquisitionLaserPower,detectorGain,experimentTime,bleachBoxRotation)); //relevant metadata retrieved and processed in this order
-    experimentData = Array.concat(experimentData, imageDimensions);
     
+    //Array.print(experimentData);
 	function processMetaData(data) 
 	{ 
        	for (dataCount = 0; dataCount < data.length; dataCount++) 
@@ -165,31 +173,72 @@ function FRAP_DATA_EXTRACTION(directory)
 	bleachBoxROIindex = parseInt(experimentData[0]) - 1;
 	bleachIndex = parseInt(experimentData[1]);
 	bleachSec = parseFloat(d2s(experimentData[2], 4));
-	frameSec = parseFloat(d2s(experimentData[3], 4));			
-	
+	frameSec = parseFloat(d2s(experimentData[3], 4));
+    bleachRotation = parseFloat(experimentData[9]);			
+    
 	run("Select All");
 	run("Plot Z-axis Profile"); //extracts time data from the Z-axis profile
 	Plot.getValues(timePoints, placeHolder); //extracts time data from the Z-axis profile
 	close;
 	roiManager("Select", bleachBoxROIindex);
-	RoiManager.rotate(parseFloat(experimentData[9]));
-	//roiManager("Deselect");
-    //run("Select None");
+	RoiManager.rotate(bleachRotation);
+	roiManager("Deselect");
+    run("Select None");
     
-    run("Duplicate...", "duplicate");
+    thresholdTypeList = newArray("Yen", "Triangle");
+    thresholdTypeLimit = thresholdTypeList.length;
+    capturedIntensity = newArray();
     
-	if (matches(directory, ".*coli.*")) 
-	{setMinAndMax(1, 150);}
-	else if (matches(directory, ".*AMB.*"))
-	{setMinAndMax(1, 6);}    
+    for (thresholdCount = 0; thresholdCount <= thresholdTypeLimit; thresholdCount++) 
+    {
+    	run("Duplicate...", "duplicate");
+    	if (matches(directory, ".*coli.*")) 
+    	{setMinAndMax(1, 150);}
+    	else if (matches(directory, ".*AMB.*"))
+    	{setMinAndMax(1, 6);}  
+    	run("Gaussian Blur...", "sigma=3 stack");
+    	run("Z Project...", "stop="+10+" projection=[Average Intensity]");
+    	run("Threshold...");
+    	setAutoThreshold(""+thresholdTypeList[thresholdCount]+" dark no-reset");
+    	run("Convert to Mask");
+    	run("Create Selection");
+    	
+    	if (thresholdCount <= thresholdTypeLimit - 1) 
+    	{
+    		run("Measure");
+    		close();
+    		close();
+    		capturedIntensity = Array.concat(capturedIntensity, Table.get("IntDen", 0));
+    		run("Clear Results");
+    	}
     
-    run("Gaussian Blur...", "sigma=2 stack");
-	run("Z Project...", "stop="+bleachIndex+" projection=[Average Intensity]");
-	
-	run("Threshold...");
-	setAutoThreshold("Yen dark no-reset");
-	run("Convert to Mask");
- 	run("Create Selection");
+    	if (thresholdCount == thresholdTypeLimit - 1)
+    	{
+    		thresholdPercentError = abs(capturedIntensity[0] - capturedIntensity[1]) / ((capturedIntensity[0] + capturedIntensity[1]) / 2) * 100;
+    		sortedIntensityIndices = Array.rankPositions(capturedIntensity);
+            
+    		if (thresholdPercentError <= 70.0) 
+    		{thresholdTypeList = Array.concat(thresholdTypeList, thresholdTypeList[sortedIntensityIndices[0]]);}
+    		else 
+    		{thresholdTypeList = Array.concat(thresholdTypeList, thresholdTypeList[sortedIntensityIndices[capturedIntensity.length - 1]]); print("TRIANGLE");}
+            
+    	}
+    
+    }
+    experimentData = Array.concat(experimentData, imageDimensions + " | "+thresholdTypeList[thresholdTypeList.length - 1]+" Thresholding");
+    //run("Duplicate...", "duplicate");
+    
+	//if (matches(directory, ".*coli.*")) 
+	//{setMinAndMax(1, 150);}
+	//else if (matches(directory, ".*AMB.*"))
+	//{setMinAndMax(1, 6);}    
+
+    //run("Gaussian Blur...", "sigma=2 stack");
+	//run("Z Project...", "stop="+bleachIndex+" projection=[Average Intensity]");
+	//run("Threshold...");
+	//setAutoThreshold("Yen dark no-reset");
+	//run("Convert to Mask");
+ 	//run("Create Selection");
 	roiManager("Add");
 	roiManager("Select", newArray(bleachBoxROIindex, roiManager("count") - 1));
 	roiManager("AND");
@@ -308,7 +357,7 @@ function FRAP_DATA_EXTRACTION(directory)
 	//////^^^Bleach and Non-Bleach Region Fluorescence Data Extraction
 	
 	//////Fluorescence Profile Data Extraction
-	if (PROFILE_ANALYSIS == true) 
+	if (FOURIER_MODE_ANALYSIS == true) 
 	{
 		run("Clear Results");
 		for (sliceCount = 1; sliceCount <= nSlices(); sliceCount++)
@@ -337,18 +386,14 @@ function FRAP_DATA_EXTRACTION(directory)
 extensionList = ["czi"] #Zeiss files are accepted by default, users can add more when prompted
 colorMap = LinearSegmentedColormap.from_list('Black', ['red','aqua','black'])
 cell_Length = 0
-fileCount = 0
+fileCount = 129
 for folders in glob.iglob(directory, recursive= True):
     for extensions in extensionList:
         sorted_files = sorted(sorted(glob.iglob(folders + f'/**/*.{extensions}', recursive= True), key=extract_float))
-        #fileCount = 98 #for skipping
-        for files in (sorted_files):
-            if len(os.listdir(files)) == False:
-                fileCount += 1
-                continue #if a folder is empty, skip it
-            print(files)
+        # fileCount = 149 #for skipping
+        for files in (sorted_files[fileCount:130]):
             dataDict = defaultdict(list); #makes a dictionary for metadata values
-            macro_arguments = {"directory": files, "ID": fileCount, "BLEACH_REGION_ANALYSIS": BLEACH_REGION_ANALYSIS, "PROFILE_ANALYSIS": PROFILE_ANALYSIS} #dictionary of arguments sent to ImageJ macro.
+            macro_arguments = {"directory": files, "ID": fileCount, "BLEACH_REGION_ANALYSIS": BLEACH_REGION_ANALYSIS, "FOURIER_MODE_ANALYSIS": FOURIER_MODE_ANALYSIS} #dictionary of arguments sent to ImageJ macro.
             FRAPMacro = ij.py.run_macro(ImageJ_FRAP_Macro, macro_arguments)
             dataDict["bleachTimeIndex"].append(int(FRAPMacro.getOutput('bleachTimeIndexOutput')))
             dataDict["bleachDuration"].append(float(FRAPMacro.getOutput('bleachDurationOutput')))
@@ -421,7 +466,6 @@ for folders in glob.iglob(directory, recursive= True):
             
             processedProfileData.plot(x = 0, y = np.arange(1, processedProfileData.shape[1]),
                                       alpha=0.75, cmap = colorMap, linestyle='-', linewidth=0.5, ax= ax_INTENSITY_PROFILE)
-            # print(processedProfileData.mean(axis=1))
             ax_INTENSITY_PROFILE.get_legend().remove()
 
             graphDict = {0: ax_FRAP, 1: ax_INTENSITY_PROFILE, 2: ax_COSINE_AMPLITUDES}  #note 3 and 2 are swapped in the non-animated version
@@ -430,7 +474,8 @@ for folders in glob.iglob(directory, recursive= True):
             
             amplitude_fits = []
             amplitudeData = pd.DataFrame()
-            data_list = ([],[])
+            data_list = ([],[],[])
+            error_list = ([],[])
             for plotCount in range(3):
                 graphData = pd.DataFrame()
                 if plotCount == 1:                   
@@ -455,26 +500,47 @@ for folders in glob.iglob(directory, recursive= True):
                 else:
 
                     try:
-                        for testTau in (np.arange(0.1, 0.51, 0.1)):
+                        # errors = ([],[])
+                        errors = ([])
+                        # for retryCount in range(2):
+                        for testTau in (np.arange(0.25, 5.01, 0.25)):
                             optimalValues, covarianceMatrix = curve_fit(modelDict[plotCount], varDict[plotCount].iloc[dataDict['bleachTimeIndex'][0]:,0],
                                                                         varDict[plotCount].iloc[dataDict['bleachTimeIndex'][0]:,1],
-                                                                        p0=[0.50, 0.50, testTau], maxfev=10000)
-                            c1_opt, c2_opt, 𝜏_opt = optimalValues
-                            if 𝜏_opt >= dataDict['frameTime'][0]:
-                                break
+                                                                        p0=[0.0, -(testTau // 0.25) * (-1 if plotCount == 2 else 1), testTau], maxfev=10000)
+                                                                        # p0=[0.01, -10.0 * (-1 if plotCount == 2 else 1), testTau], maxfev=10000)
+
+                            # errors[0].append(np.sqrt(np.diagonal(covarianceMatrix))[2])
+                                # print(optimalValues)
                                 
+                            errors.append(np.sqrt(np.diagonal(covarianceMatrix))[2])
+                            
+                                
+                            # print(errors)
+                            # print(len(optimalValues))
+                        # print(errors[1][np.abs(np.array(errors[0])).argmin()])
+                        
+                        # optimalValues, covarianceMatrix = curve_fit(modelDict[plotCount], varDict[plotCount].iloc[dataDict['bleachTimeIndex'][0]:,0],
+                        #                                             varDict[plotCount].iloc[dataDict['bleachTimeIndex'][0]:,1],
+                        #                                             p0=[0.01, 10.0 * (-1 if plotCount == 2 else 1) * errors[1][np.abs(np.array(errors[0])).argmin()], np.arange(0.25, 3.01, 0.25)[np.abs(np.array(errors[0])).argmin()]], maxfev=10000)    
+                        optimalValues, covarianceMatrix = curve_fit(modelDict[plotCount], varDict[plotCount].iloc[dataDict['bleachTimeIndex'][0]:,0],
+                                                                    varDict[plotCount].iloc[dataDict['bleachTimeIndex'][0]:,1],
+                                                                    p0=[0.0, -(np.arange(0.25, 5.01, 0.25)[np.array(errors).argmin()] // 0.25) * (-1 if plotCount == 2 else 1) , np.arange(0.25, 5.01, 0.25)[np.array(errors).argmin()]], maxfev=10000)    
+                        c1_opt, c2_opt, 𝜏_opt = optimalValues
                         diffusion_Coefficient = MASTER_CURVE(cellType, plotCount, cell_Length, internal_radius, 𝜏_opt)
                         data_list[0].append(𝜏_opt)
                         data_list[1].append(diffusion_Coefficient)
+                        data_list[2].append(c1_opt)
+                        error_list[1].append(np.sqrt(np.diagonal(covarianceMatrix))[0]) #error on plateau
+                        error_list[0].append(np.sqrt(np.diagonal(covarianceMatrix))[2]) #error on tau
                         x_fit = np.linspace(varDict[plotCount].iloc[dataDict['bleachTimeIndex'][0], 0], varDict[plotCount].iloc[-1, 0], 100)
                         y_fit = modelDict[plotCount](x_fit, c1_opt, c2_opt, 𝜏_opt)                        
                         graphData["x"] = x_fit
                         graphData["y"] = y_fit
                         graphData.plot(x = 0, y = 1, color = 'r', ax= graphDict[plotCount])
-
+        
+            
                     except:
                         pass
-            
             ax_FRAP.set_xlabel('Time (s)')
             ax_FRAP.set_ylabel('Avg Fluorescence Intensity (Arbitrary units)')
             ax_INTENSITY_PROFILE.set_xlabel('Position along cell without endcaps (µm)')
@@ -496,6 +562,15 @@ for folders in glob.iglob(directory, recursive= True):
                                     ['D_BleachRegion[I2-I1] (µm^2/s)', data_list[1][0]],
                                     ['Tau_Profile (s)', data_list[0][1]],
                                     ['D_Profile (µm^2/s)', data_list[1][1]],
+                                    ['Fitting values below', 0],
+                                    ['Bleach plateau value', data_list[2][0]],
+                                    ['Bleach plateau percent error', error_list[1][0] / data_list[2][0] * 100],
+                                    ['Bleach tau value', data_list[0][0]],
+                                    ['Bleach tau percent error', error_list[0][0] / data_list[0][0] * 100],
+                                    ['profile plateau value', data_list[2][1]],
+                                    ['profile plateau percent error', error_list[1][1] / data_list[2][1] * 100],
+                                    ['profile tau value', data_list[0][1]],
+                                    ['profile tau percent error', error_list[0][1] / data_list[0][1] * 100],
                                     ],
                                     columns= ['Parameters', 'Experiment Data'])
             experimentData = pd.concat([experimentData, newEntry], ignore_index= True)
