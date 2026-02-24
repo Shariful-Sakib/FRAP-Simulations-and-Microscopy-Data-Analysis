@@ -41,23 +41,23 @@ plt.close("all")
 # For spirilla, set shape >= 2 and you can vary everything.
 # Finally, change any other setting for the FRAP experiment.
 
-shape = 2# 0 = sphere, 1 = rod, 2 = helical cell
-shapeDict = {0: "sphere", 1:"rod", 2:"helical cell"}
+shape = 2# 0 = sphere, 1 = rod, 2 = helical cell, 3 = comma-shaped cell (2D projection of helix)
+shapeDict = {0: "sphere", 1:"rod", 2:"helical cell", 3:"comma-shaped cell"}
 shapeName = shapeDict[shape]
 internal_radius = 0.27 #um
-length = 4.62 #um
+length = 4 #um
 pitch = 2.5#um
 amplitude = 0.2 #um
 contourLength = (length - internal_radius*2) * math.sqrt(1 + (2*math.pi*amplitude/pitch)**2) + internal_radius*2
 # temp = 5
-scale_factor = 3#max(3.5 * length / 5, 1)   #for graphing purposes
+scale_factor = max(3.5 * length / 5, 1)   #for graphing purposes
 length_correction = internal_radius     #ensures the shape produced is of the correct length
 max_segment_error = 0.0042              #um ~4.2 nm maximum error between true and calculated distances (approximate length of an FP molecule)
 segment_resolution = 2*math.sqrt((max_segment_error + internal_radius)**2 - internal_radius**2)
 pixel_resolution = 0.085                #um 85 nm resolution used for creating plot profiles
 
 numParticles = 1000
-fast_diffusion_constant = 5 # um^2/s
+fast_diffusion_constant = 15 # um^2/s
 immobile_diffusion_constant = 0 #um^2/s
 slow_diffusion_constant = 1 # um^2/s
 fast_particle_proportion = 1
@@ -65,6 +65,7 @@ immobile_particle_proportion = 0
 APPLY_COMPARTMENT_COLLISIONS = True # Can toggle collisions (required for FRAP)
 DRAW_DISTANCES_TO_MIDPOINTS = False # Can toggle drawing distances (slower and not reccommended)
 SHOW_MIDPOINTS = True              # Can toggle plotting midpoints on the 3D view (optional)
+SHOW_REGION_SLICES = False         # Can toggle if the user wants to see the slices related to the Fourier mode analysis (intensity profiles) or not
 
 numFastParticles = int(numParticles * fast_particle_proportion)
 numImmobileParticles = int(numParticles * immobile_particle_proportion)
@@ -73,7 +74,7 @@ diffusion_constant = np.repeat([np.full(3, fast_diffusion_constant), np.full(3, 
                                [numFastParticles, numSlowParticles, numImmobileParticles], axis=0) #d_c um^2/s #mask of diffusion constants
 np.random.shuffle(diffusion_constant)
 
-simulated_seconds = 1#math.ceil(contourLength**2*((3/4) if length <= 5 else (1/3))/(2*fast_diffusion_constant) + 1)  #sec Simulated total duration of the experiment
+simulated_seconds = math.ceil(contourLength**2*((3/4) if length <= 5 else (1/3))/(2*fast_diffusion_constant) + 1)  #sec Simulated total duration of the experiment
 frame_interval = 0.030 #sec
 simulated_interval = 0.001 #sec
 simulated_range = int((simulated_seconds / frame_interval) * (frame_interval / simulated_interval)) #iterations
@@ -96,7 +97,7 @@ if bleach_box_scan_size:
 else:
     cosineFittingMask = pixel_intervals >= 0
     # print(cosineFittingMask)
-graphTransformation = 1 # 0 = stationary + interactive, 1 = triangle function wobble, 2 = swimming, 3 = swimming + turning
+graphTransformation = 0 # 0 = stationary + interactive, 1 = triangle function wobble, 2 = swimming, 3 = swimming + turning
 SAVE_ANIMATION = False #Users can change this to True if they want to save a GIF of a simulation
 
 if SAVE_ANIMATION:
@@ -105,6 +106,9 @@ if SAVE_ANIMATION:
     print(saveFolder)
     if saveFolder == "\\": #doesn't save gif if user cancels   
         SAVE_ANIMATION = False
+    
+if shape == 3:
+    pitch = length
 if shape <= 1:
     amplitude = 0
     pitch = np.inf
@@ -116,6 +120,7 @@ if shape == 0:
     scale_factor = 1       
     length_correction = 0
 
+repeat_colours = plt.cm.tab10.colors
 time_list = ([])
 FRAP_values = ([],[],[]) # 1st element holds simple FRAP value list, 2nd element holds simple FLAP value list, 3rd element hold cosine amplitude list
 data_list = ([],[],[]) #1st and 2nd element contains lists of data from simple analysis (FRAP and FLAP) and 3rd element contains lists of data from plot profile
@@ -128,12 +133,13 @@ def FLAP_Model(t, A, B, 𝜏2):
    return (A * np.exp(-t / 𝜏2) + B)
 
 def COSINE_FIT_Model(x, I0, I_amplitude):
-    return (I0 + (I_amplitude * np.cos(np.pi * x / length)))
+    return (I0 + (I_amplitude * np.cos(np.pi * x / L_cos_fit)))
 
 def generate_shape_midPoints(num_points):
     midPoints_vals = np.linspace(0 + length_correction, length - length_correction, num_points)  # created spaced out points on the shape mid points
-    z_mid = amplitude * np.sin((2 * np.pi * midPoints_vals) / pitch) #parametric equations
-    y_mid = amplitude * np.cos((2 * np.pi * midPoints_vals) / pitch)
+    #parametric equations
+    z_mid = amplitude * np.sin((2 * np.pi * midPoints_vals) / pitch) if shape != 3 else np.zeros(midPoints_vals.shape)
+    y_mid = amplitude * np.cos((2 * np.pi * midPoints_vals) / pitch) 
     x_mid = midPoints_vals
     shape_points = np.column_stack((x_mid, y_mid, z_mid))
     return shape_points[np.newaxis, :, :]
@@ -173,7 +179,7 @@ def detect_fluorescence(fluorescent_particles):
     inside_compartment_mask = min_distances <= internal_radius
     outside_compartment_mask = ~inside_compartment_mask
     if not bleach_box_scan_size:
-        if shape == 2 and length <= pitch and Decimal(str(length)) > Decimal(str(2*internal_radius)):
+        if shape >= 2 and length <= pitch and Decimal(str(L_effective)) > Decimal(str(2*internal_radius)):
             bleach_region_mask = ((length-2*internal_radius)*fluorescent_particles[:,0] +
                                  amplitude*(math.cos(2*math.pi*(length-internal_radius)/pitch) - math.cos(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,1] +
                                  amplitude*(math.sin(2*math.pi*(length-internal_radius)/pitch) - math.sin(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,2]
@@ -193,8 +199,8 @@ def detect_fluorescence(fluorescent_particles):
     return (bleach_region_particles_mask, Non_bleach_region_particles_mask,
             inside_compartment_mask, outside_compartment_mask, fast_mask, slow_mask, immobile_mask)   
 
-SKIP = False # Keep as true, do not change
-DEFINITION = True
+SKIP = False 
+DEFINITION = True # Keep as true, do not change
 def update(frame): # Update the animation
     current_simulation_time = round(frame * simulated_interval, 3)
     global particles_expanded, min_distances, diffusion_constant, SKIP, DEFINITION
@@ -241,8 +247,24 @@ def update(frame): # Update the animation
                 collision_mask = min_distances > internal_radius
     
         if SHOW_MIDPOINTS: ax_3D.scatter(shape_expanded[0, :, 0], shape_expanded[0, :, 1], shape_expanded[0, :, 2], color='white', label='Discretized helical curve', lw=0.1, marker='.')
-        if numFastParticles != 0: ax_3D.scatter(particles_expanded[fast_mask, 0], particles_expanded[fast_mask, 1], particles_expanded[fast_mask, 2],
-                   color='lime', alpha=0.75, s=20, label=f"Inside {shapeDict[shape]} [FAST] N= {fast_mask.sum()}", edgecolors='none')
+        if numFastParticles != 0 and SHOW_REGION_SLICES == False: ax_3D.scatter(particles_expanded[fast_mask, 0], particles_expanded[fast_mask, 1], particles_expanded[fast_mask, 2],
+                    color='lime', alpha=0.75, s=20, label=f"Inside {shapeDict[shape]} [FAST] N= {fast_mask.sum()}", edgecolors='none')
+        else:
+                f_n= np.reshape(np.arange(0, L_P, pixel_resolution) / L_P,(-1,1))
+                intervals = (
+                            amplitude**2 * (2*f_n-1) + (length-2*internal_radius) * (f_n*length+internal_radius-2*internal_radius*f_n)
+                            - amplitude**2 * (2*f_n-1)*np.cos(2*math.pi*(length-2*internal_radius)/pitch)
+                            )
+                region_masks = np.logical_and(((shape_expanded[0][-1][0] - shape_expanded[0][0][0]) * particles_expanded[inside_compartment_mask, 0] +
+                                                          (shape_expanded[0][-1][1] - shape_expanded[0][0][1]) * particles_expanded[inside_compartment_mask, 1] + 
+                                                          (shape_expanded[0][-1][2] - shape_expanded[0][0][2]) * particles_expanded[inside_compartment_mask, 2] >= intervals),
+                                                ((shape_expanded[0][-1][0] - shape_expanded[0][0][0]) * particles_expanded[inside_compartment_mask, 0] +
+                                                (shape_expanded[0][-1][1] - shape_expanded[0][0][1]) * particles_expanded[inside_compartment_mask, 1] +
+                                                (shape_expanded[0][-1][2] - shape_expanded[0][0][2]) * particles_expanded[inside_compartment_mask, 2] < intervals + float(Decimal(str(intervals[1][0]))-Decimal(str(intervals[0][0]))))
+                                                )
+                for region in range(region_masks.shape[0]):
+                    ax_3D.scatter(particles_expanded[region_masks[region,:], 0], particles_expanded[region_masks[region,:], 1], particles_expanded[region_masks[region,:], 2], color=repeat_colours[region % len(repeat_colours)], s=5)         
+              
         if numSlowParticles != 0: ax_3D.scatter(particles_expanded[slow_mask, 0], particles_expanded[slow_mask, 1], particles_expanded[slow_mask, 2],
                    color='cyan', alpha=0.75, s=20, label=f"Inside {shapeDict[shape]} [SLOW] N= {slow_mask.sum()}", edgecolors='none')
         if numImmobileParticles != 0: ax_3D.scatter(particles_expanded[immobile_mask, 0], particles_expanded[immobile_mask, 1], particles_expanded[immobile_mask, 2],
@@ -253,7 +275,7 @@ def update(frame): # Update the animation
             ax_3D.scatter(closest_points[:, 0], closest_points[:, 1], closest_points[:, 2], color='k', s=20, label='Closest Points') #optional: can comment this out #plots closest points
             for point, closest_point in zip(particles_expanded, closest_points): #optional: can comment this loop out, it plots distances
                 ax_3D.plot([point[0], closest_point[0]], [point[1], closest_point[1]], [point[2], closest_point[2]], color='orange', linestyle='--', linewidth=0.5)
-          
+        
         ax_3D.set_xlabel('(µm)', color='white' if graphTransformation < 2 else 'black')
         ax_3D.xaxis.labelpad = 20
         ax_3D.tick_params(axis='x', colors='white' if graphTransformation < 2 else 'black')
@@ -282,7 +304,7 @@ def update(frame): # Update the animation
         ax_FRAP.set_xlim(0, simulated_seconds)
         ax_INTENSITY_PROFILE.set_xlabel(f'Position along {shapeDict[shape]} without endcaps (µm)\nPixel resolution: {pixel_resolution * 1000:.2f} nm')
         ax_INTENSITY_PROFILE.set_ylabel('Fluorescence proportion (Arbitrary units)')
-        ax_INTENSITY_PROFILE.set_xlim(0, length)
+        ax_INTENSITY_PROFILE.set_xlim(0, length if (shape < 2 and length > pitch) else L_effective)
         ax_COSINE_AMPLITUDES.set_xlabel('Time (s)')
         ax_COSINE_AMPLITUDES.set_ylabel('Fluorescence amplitudes of cosine fits (Arbitrary units)')
         ax_COSINE_AMPLITUDES.set_xlim(0, simulated_seconds)
@@ -296,10 +318,26 @@ def update(frame): # Update the animation
             ax_FRAP.scatter(current_simulation_time, FRAP_values[1][-1], color= (255/255, 0/255, 255/255), linewidth=1,
                             s=30, alpha=0.8, label= "Non-Bleach region fluorescence" if frame == 0 else None, edgecolors='black')
             if shape != 0 and Decimal(str(length)) >= Decimal(str(internal_radius*2 + pixel_resolution)): #plot profiles not supported for spheres
-                if current_simulation_time == round(bleach_end_time, 3): [plot_lines.remove() for plot_lines in ax_INTENSITY_PROFILE.lines]
-                fluorescence_profile = (np.count_nonzero((particles_expanded[inside_compartment_mask, 0] >= pixel_intervals)
-                                                        & (particles_expanded[inside_compartment_mask, 0] < pixel_intervals + pixel_resolution), axis= 1)) / numParticles  
-    
+                
+                if current_simulation_time == round(bleach_end_time, 3): 
+                    [plot_lines.remove() for plot_lines in ax_INTENSITY_PROFILE.lines]
+                
+                if shape >= 2 and length <= pitch and (Decimal(str(L_effective)) > Decimal(str(2*internal_radius + pixel_resolution))):
+                    region_masks = np.logical_and(((shape_expanded[0][-1][0] - shape_expanded[0][0][0]) * particles_expanded[inside_compartment_mask, 0] +
+                                                              (shape_expanded[0][-1][1] - shape_expanded[0][0][1]) * particles_expanded[inside_compartment_mask, 1] + 
+                                                              (shape_expanded[0][-1][2] - shape_expanded[0][0][2]) * particles_expanded[inside_compartment_mask, 2] >= intervals),
+                                                   ((shape_expanded[0][-1][0] - shape_expanded[0][0][0]) * particles_expanded[inside_compartment_mask, 0] +
+                                                   (shape_expanded[0][-1][1] - shape_expanded[0][0][1]) * particles_expanded[inside_compartment_mask, 1] +
+                                                   (shape_expanded[0][-1][2] - shape_expanded[0][0][2]) * particles_expanded[inside_compartment_mask, 2] < intervals + float(Decimal(str(intervals[1][0]))-Decimal(str(intervals[0][0]))))
+                                                   )
+                    fluorescence_profile = (np.count_nonzero(region_masks, axis=1)) / numParticles
+                    # for region in range(region_masks.shape[0]):
+                    #     ax_3D.scatter(particles_expanded[region_masks[region,:], 0], particles_expanded[region_masks[region,:], 1], particles_expanded[region_masks[region,:], 2], color=repeat_colours[region % len(repeat_colours)], label=f'region{region}', s=5) 
+
+                else:
+                    fluorescence_profile = (np.count_nonzero((particles_expanded[inside_compartment_mask, 0] >= pixel_intervals)
+                                                            & (particles_expanded[inside_compartment_mask, 0] < pixel_intervals + pixel_resolution), axis= 1)) / numParticles  
+
                 ax_INTENSITY_PROFILE.plot(pixel_intervals, fluorescence_profile, alpha=0.75, color= (colorMap(frame/simulated_range)),
                                 linestyle='-', linewidth=1)
                 ax_INTENSITY_PROFILE.relim()
@@ -326,7 +364,7 @@ def update(frame): # Update the animation
             for count in range(len(FRAP_values)):
                 optimalValues, covarianceMatrix = curve_fit(modelDict[count], frame_list[frame_list >= round(bleach_end_time, 3)], np.array(FRAP_values[count][np.argmax(frame_list >= round(bleach_end_time, 3)):]), p0=[0,0.5,5])
                 c1_opt, c2_opt, 𝜏_opt = optimalValues
-                data_list[count].append([(fast_diffusion_constant * 𝜏_opt )/ length**2, fast_diffusion_constant, 𝜏_opt, length])
+                data_list[count].append([(fast_diffusion_constant * 𝜏_opt )/ (length**2 if (shape < 2 and length >= pitch) else L_effective**2), fast_diffusion_constant, 𝜏_opt, length if (shape < 2 and length >= pitch) else L_effective])
                 x_fit = np.linspace(frame_list[frame_list >= round(bleach_end_time, 3)][0], frame_list[-1], 100)
                 y_fit = modelDict[count](x_fit, c1_opt, c2_opt, 𝜏_opt)    
                 graphDict[count].plot(x_fit, y_fit, color='r', label= 'red line fit')            
@@ -348,8 +386,22 @@ def update(frame): # Update the animation
 
 
 shape_expanded = generate_shape_midPoints(int(Decimal(str(contourLength)) / Decimal(str(segment_resolution))))
+L_P = np.sqrt(np.sum((shape_expanded[0][-1] - shape_expanded[0][0]) ** 2))
+L_effective = L_P + 2*internal_radius
 particles_expanded = generate_random_particles(numParticles, shape_expanded)
 closest_points, min_distances = distance_to_shape_midPoints(shape_expanded, particles_expanded)
+
+if shape >= 2 and length <= pitch and (Decimal(str(L_effective)) > Decimal(str(2*internal_radius + pixel_resolution))):
+    f_n= np.reshape(np.arange(0, L_P, pixel_resolution) / L_P,(-1,1))
+    intervals = (
+                amplitude**2 * (2*f_n-1) + (length-2*internal_radius) * (f_n*length+internal_radius-2*internal_radius*f_n)
+                - amplitude**2 * (2*f_n-1)*np.cos(2*math.pi*(length-2*internal_radius)/pitch)
+                )
+    pixel_intervals = np.arange(internal_radius, L_P + internal_radius, pixel_resolution)
+    cosineFittingMask = pixel_intervals >= 0
+    L_cos_fit = L_effective
+else:
+    L_cos_fit = length
 
 fig = plt.figure(figsize=(16, 9)) # Set up the figure and 3D axis
 ax_3D = fig.add_subplot(2,1,1, projection='3d')

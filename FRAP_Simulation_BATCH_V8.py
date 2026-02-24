@@ -19,7 +19,7 @@ import math
 import time
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
-from scipy.optimize import curve_fit;
+from scipy.optimize import curve_fit
 import tkinter
 from tkinter import filedialog
 import ctypes
@@ -34,6 +34,7 @@ import psutil
 
 COLLECT_DATA = True # Toggle to collect large data sets or not
 colorMap = LinearSegmentedColormap.from_list('Black', ['red','aqua','black'])
+repeat_colours = plt.cm.tab10.colors
 shapeDict = {0: "sphere", 1:"rod", 2:"spirillum"}
 directory = ''
 if COLLECT_DATA:
@@ -58,7 +59,7 @@ if COLLECT_DATA:
     # For spirilla, set shape = 2 and you can vary everything.
     # Finally, change any other setting for the FRAP experiment.
 def collect_data( #These are all the default values
-    shape = 1, # 0 = sphere, 1 = rod, 2 = spirillum
+    shape = 2, # 0 = sphere, 1 = rod, 2 = spirillum
     internal_radius = 0.27,#um
     length = 5, #um
     pitch = 2.5, #um
@@ -81,6 +82,7 @@ def collect_data( #These are all the default values
     SHOW_MIDPOINTS = False,              # Can toggle plotting midpoints on the 3D view (optional)  
     SHOW_HIGHLIGHTS = False, # Can toggle to get a play-by-play of all the steps: initialization, pre-bleach, mid-bleach, post bleach. (optional)
     SHOW_FINAL_VISUAL = False, # Can toggle to show the end result visually
+    #SHOW_REGION_SLICES = False, # Can toggle if the user wants to see the slices related to the Fourier mode analysis (intensity profiles) or not (optional)
     
     simulated_seconds = 1, #sec Simulated total duration of the experiment 
     frame_interval = 0.030, #sec
@@ -139,7 +141,7 @@ def collect_data( #These are all the default values
        return (A * np.exp(-t / 𝜏2) + B)
     
     def COSINE_FIT_Model(x, I0, I_amplitude):
-        return (I0 + (I_amplitude * np.cos(np.pi * x / length)))
+        return (I0 + (I_amplitude * np.cos(np.pi * x / L_cos_fit)))
     
     def generate_shape_midPoints(num_points):
         midPoints_vals = np.linspace(0 + length_correction, length - length_correction, num_points)  # created spaced out points on the shape midPoints
@@ -184,7 +186,8 @@ def collect_data( #These are all the default values
         inside_compartment_mask = min_distances <= internal_radius
         outside_compartment_mask = ~inside_compartment_mask
         
-        if not bleach_box_scan_size:     
+        if not bleach_box_scan_size:
+            
             if shape == 2 and length <= pitch and Decimal(str(length)) > Decimal(str(2*internal_radius)):
                 bleach_region_mask = ((length-2*internal_radius)*fluorescent_particles[:,0] +
                                      amplitude*(math.cos(2*math.pi*(length-internal_radius)/pitch) - math.cos(2*math.pi*(internal_radius)/pitch))*fluorescent_particles[:,1] +
@@ -235,7 +238,25 @@ def collect_data( #These are all the default values
         
         if SHOW_MIDPOINTS: ax_3D.scatter(midPoints[0, :, 0], midPoints[0, :, 1], midPoints[0, :, 2], color='blue', label='Mid points', lw=0.5) # Plot the entire midPoints
         if numFastParticles != 0: ax_3D.scatter(particles[fast_mask, 0], particles[fast_mask, 1], particles[fast_mask, 2],
-                   color='lime', alpha=0.75, s=20, label=f"Inside {shapeDict[shape]} [FAST] N= {fast_mask.sum()}", edgecolors='none')
+                    color='lime', alpha=0.75, s=20, label=f"Inside {shapeDict[shape]} [FAST] N= {fast_mask.sum()}", edgecolors='none')
+        # if numFastParticles != 0 and SHOW_REGION_SLICES == False: ax_3D.scatter(particles[fast_mask, 0], particles[fast_mask, 1], particles[fast_mask, 2],
+        #             color='lime', alpha=0.75, s=20, label=f"Inside {shapeDict[shape]} [FAST] N= {fast_mask.sum()}", edgecolors='none')
+        # else:
+        #     f= np.reshape(np.arange(0, L_P, pixel_resolution) / L_P,(-1,1))
+        #     intervals = (
+        #                 amplitude**2 * (2*f-1) + (length-2*internal_radius) * (f*length+internal_radius-2*internal_radius*f)
+        #                 - amplitude**2 * (2*f-1)*np.cos(2*math.pi*(length-2*internal_radius)/pitch)
+        #                 )
+        #     region_masks = np.logical_and(((shape_expanded[0][-1][0] - shape_expanded[0][0][0]) * particles_expanded[inside_compartment_mask, 0] +
+        #                                               (shape_expanded[0][-1][1] - shape_expanded[0][0][1]) * particles_expanded[inside_compartment_mask, 1] + 
+        #                                               (shape_expanded[0][-1][2] - shape_expanded[0][0][2]) * particles_expanded[inside_compartment_mask, 2] >= intervals),
+        #                                     ((shape_expanded[0][-1][0] - shape_expanded[0][0][0]) * particles_expanded[inside_compartment_mask, 0] +
+        #                                     (shape_expanded[0][-1][1] - shape_expanded[0][0][1]) * particles_expanded[inside_compartment_mask, 1] +
+        #                                     (shape_expanded[0][-1][2] - shape_expanded[0][0][2]) * particles_expanded[inside_compartment_mask, 2] < intervals + float(Decimal(str(intervals[1][0]))-Decimal(str(intervals[0][0]))))
+        #                                     )
+        #     for region in range(region_masks.shape[0]):
+        #         ax_3D.scatter(particles_expanded[region_masks[region,:], 0], particles_expanded[region_masks[region,:], 1], particles_expanded[region_masks[region,:], 2], color=repeat_colours[region % len(repeat_colours)], label="1", s=5)         
+            
         if numSlowParticles != 0: ax_3D.scatter(particles[slow_mask, 0], particles[slow_mask, 1], particles[slow_mask, 2],
                    color='cyan', alpha=0.75, s=20, label=f"Inside {shapeDict[shape]} [SLOW] N= {slow_mask.sum()}", edgecolors='none')
         if numImmobileParticles != 0:ax_3D.scatter(particles[immobile_mask, 0], particles[immobile_mask, 1], particles[immobile_mask, 2],
@@ -246,7 +267,9 @@ def collect_data( #These are all the default values
             ax_3D.scatter(closest_points[:, 0], closest_points[:, 1], closest_points[:, 2], color='k', s=20, label='Closest Points') #optional: can comment this out #plots closest points
             for point, closest_point in zip(particles, closest_points): #optional: can comment this loop out # Draw distance lines
                 ax_3D.plot([point[0], closest_point[0]], [point[1], closest_point[1]], [point[2], closest_point[2]], color='orange', linestyle='--', linewidth=0.5)
-    
+        
+        
+        
         if PLOT_GRAPHS:
             ax_FRAP.scatter(time_list, FRAP_values[0], color='lime',
                             s=20, label=f"Fluorescence within {shapeDict[shape]} inside bleach region", edgecolors='black')
@@ -285,7 +308,7 @@ def collect_data( #These are all the default values
                             graphDict[plotCount].plot(x_fit, y_fit, color='r')
                         except:
                             pass
-
+    
         ax_3D.set_title(title, color='white', x=0.5, y=1.0)
         ax_3D.set_xlabel('(µm)', color='white')
         ax_3D.set_ylabel('(µm)', color='white')
@@ -306,7 +329,7 @@ def collect_data( #These are all the default values
         ax_FRAP.set_xlim(0, simulated_seconds)
         ax_INTENSITY_PROFILE.set_xlabel(f'Position along {shapeDict[shape]} without endcaps (µm)\nPixel resolution: {pixel_resolution * 1000:.2f} nm')
         ax_INTENSITY_PROFILE.set_ylabel('Fluorescence proportion (Arbitrary units)')
-        ax_INTENSITY_PROFILE.set_xlim(0, length)
+        ax_INTENSITY_PROFILE.set_xlim(0, length if (shape < 2 and length > pitch) else L_effective)
         ax_COSINE_AMPLITUDES.set_xlabel('Time (s)')
         ax_COSINE_AMPLITUDES.set_ylabel('Fluorescence amplitudes of cosine fits (Arbitrary units)')
         ax_COSINE_AMPLITUDES.set_xlim(0, simulated_seconds)
@@ -316,14 +339,28 @@ def collect_data( #These are all the default values
         return fig
     plt.close("all")
     shape_expanded = generate_shape_midPoints(int(Decimal(str(contourLength)) / Decimal(str(segment_resolution)))) #section the shape path
+    L_P = np.sqrt(np.sum((shape_expanded[0][-1] - shape_expanded[0][0]) ** 2))
+    L_effective = L_P + 2*internal_radius
     particles_expanded = generate_random_particles(numParticles, shape_expanded)  # Generate random point particles
     closest_points, min_distances = distance_to_shape_midPoints(shape_expanded, particles_expanded)
     if SHOW_HIGHLIGHTS: visualize_environment(shape_expanded, particles_expanded, closest_points, min_distances, False, 0.00, f"Particle diffusion inside a {shapeDict[shape]} (INITIALIZATION) \n Elapsed time: {0:.3f} s")
     
+    if shape == 2 and length <= pitch and (Decimal(str(L_effective)) > Decimal(str(2*internal_radius + pixel_resolution))):
+        f_n= np.reshape(np.arange(0, L_P, pixel_resolution) / L_P,(-1,1))
+        intervals = (
+                    amplitude**2 * (2*f_n-1) + (length-2*internal_radius) * (f_n*length+internal_radius-2*internal_radius*f_n)
+                    - amplitude**2 * (2*f_n-1)*np.cos(2*math.pi*(length-2*internal_radius)/pitch)
+                    )
+        pixel_intervals = np.arange(internal_radius, L_P + internal_radius, pixel_resolution)
+        cosineFittingMask = pixel_intervals >= 0
+        L_cos_fit = L_effective
+    else:
+        L_cos_fit = length
+    
     current_simulation_time = 0.0
     for count in range(simulated_range): #iterate through time
         current_simulation_time = round(count * time_step, 3)
-        print("\r", f"iteration {count} out of {simulated_range}", end="")
+        print("\r", f"iteration {count + 1} out of {simulated_range}", end="")
         sys.stdout.flush()
         if current_simulation_time > round(bleach_start_time,3) and current_simulation_time < round(bleach_end_time, 3): #handles calls to photobleaching
     
@@ -340,9 +377,20 @@ def collect_data( #These are all the default values
                 time_list.append(current_simulation_time)
                 FRAP_values[0].append(bleach_region_particles_mask.sum() / numParticles)
                 FRAP_values[1].append(Non_bleach_region_particles_mask.sum() / numParticles)
-                profile_list.append(np.count_nonzero((particles_expanded[inside_compartment_mask, 0] >= pixel_intervals)
-                                                        & (particles_expanded[inside_compartment_mask, 0] < pixel_intervals + pixel_resolution), axis= 1) / numParticles)
                 
+                if shape == 2 and length <= pitch and (Decimal(str(L_effective)) > Decimal(str(2*internal_radius + pixel_resolution))):
+                    region_masks = np.logical_and(((shape_expanded[0][-1][0] - shape_expanded[0][0][0]) * particles_expanded[inside_compartment_mask, 0] +
+                                                              (shape_expanded[0][-1][1] - shape_expanded[0][0][1]) * particles_expanded[inside_compartment_mask, 1] + 
+                                                              (shape_expanded[0][-1][2] - shape_expanded[0][0][2]) * particles_expanded[inside_compartment_mask, 2] >= intervals),
+                                                   ((shape_expanded[0][-1][0] - shape_expanded[0][0][0]) * particles_expanded[inside_compartment_mask, 0] +
+                                                   (shape_expanded[0][-1][1] - shape_expanded[0][0][1]) * particles_expanded[inside_compartment_mask, 1] +
+                                                   (shape_expanded[0][-1][2] - shape_expanded[0][0][2]) * particles_expanded[inside_compartment_mask, 2] < intervals + float(Decimal(str(intervals[1][0]))-Decimal(str(intervals[0][0]))))
+                                                   )
+                    profile_list.append(np.count_nonzero(region_masks, axis=1)/ numParticles)
+                else:        
+                    profile_list.append(np.count_nonzero((particles_expanded[inside_compartment_mask, 0] >= pixel_intervals)
+                                                            & (particles_expanded[inside_compartment_mask, 0] < pixel_intervals + pixel_resolution), axis= 1) / numParticles)
+                    
         particles_expanded, displacement = diffuse_particles(particles_expanded, diffusion_constant) #diffusion
         closest_points, min_distances = distance_to_shape_midPoints(shape_expanded, particles_expanded) #distance search to see where particles are in reference to shape compartment
         
@@ -376,10 +424,11 @@ def collect_data( #These are all the default values
                         f"Bleach (start/end/duration) (s): {bleach_start_time}/{bleach_end_time}/{bleach_duration}",
                         f"Mid point resolution (um): {segment_resolution}"])
     time0 = None
-        # test = ([], [], [[]])
+            # test = ([], [], [[]])
         # print((data_list))
         # print(len(data_list[0][0][0]))
         # print(len(data_list[0]))
+        # print(len(data_list[1]))
         # if len(data_list[0]) >= 1 and len(data_list[2]) >= 1:
         #     repeatFlag = False
     return data_list, FRAP_values, time_list, pixel_intervals, profile_list, fig
@@ -391,11 +440,12 @@ replicates = 10 # replicates per variable
 shapes = ([2])
 aspectRatio_array = np.logspace(np.log10(1), np.log10(50), 50) # aspect ratios
 lengths = np.array([])
-internal_radius_batch = None #np.array([0.27])
-diffusions = np.array([0.5])
+internal_radius_batch = np.array([0.27])
+diffusions = np.array([15])
+sim_D = 0.1 #comment out when not needed
 frameRates = np.array([0.030])
 particles = np.array([1000])
-amplitudes = np.array([0.2,0.5,1,2])#np.arange(0,2+0.01,0.25)
+amplitudes = np.array([0.2])#np.arange(0,2+0.01,0.25)
 pitches = np.array([2.5])#np.logspace(np.log10(0.2), np.log10(50), 22)
 # pitches = np.flip(pitches)
 bleach_box_size_batch = None#np.arange(0.5, 4.1, 0.5)
@@ -404,9 +454,9 @@ bleach_time_multiplier = np.array([1]) # array of multipliers for frame time
 
 # Call collect_data to run the simulation
 for shapeCount in range(len(shapes)):
-    for radiusCount in range(len(internal_radius_batch) if internal_radius_batch else 1):  
+    for radiusCount in range(len(internal_radius_batch) if internal_radius_batch.any() else 1):  
         # print(f"shape {shapeCount}")
-        if not internal_radius_batch:
+        if not internal_radius_batch.any():
             if shapes[shapeCount] == 1:
                 sim_internal_radius = 0.3
                 # lengths = aspectRatio_array * 2 * sim_internal_radius # converts aspect ratios into lengths
@@ -422,16 +472,17 @@ for shapeCount in range(len(shapes)):
             for pitchCount in range(len(pitches)):
                 # print(f"pitch index: {pitchCount} | pitch: {pitches[pitchCount]}")
                 for lengthCount in range(len(lengths)):
-                    print(f"length index: {lengthCount}")
+                    # print(f"length index: {lengthCount}")
                     contourLength = (lengths[lengthCount] - sim_internal_radius*2) * math.sqrt(1 + (2*math.pi*amplitudes[amplitudeCount]/pitches[pitchCount])**2) + sim_internal_radius*2 if shapes[shapeCount] == 2 else lengths[lengthCount]
+                    # contourLength = lengths[lengthCount]
                     for diffusionCount in range(len(diffusions)):
-                        print(f"Df index: {diffusionCount}")
+                        # print(f"Df index: {diffusionCount}")
                         for frameIntervalCount in range(len(frameRates)):
-                            print(f"Frame interval index: {frameIntervalCount}")
+                            # print(f"Frame interval index: {frameIntervalCount}")
                             for boxCount in range(len(bleach_box_size_batch) if bleach_box_size_batch else 1): 
-                                print(f"box size index: {bleach_box_size_batch[boxCount]}" if bleach_box_size_batch else 1)
+                                # print(f"box size index: {bleach_box_size_batch[boxCount]}" if bleach_box_size_batch else 1)
                                 for bleachCount in range(len(bleach_time_multiplier)):
-                                    print(bleach_time_multiplier[bleachCount])
+                                    # print(bleach_time_multiplier[bleachCount])
                                     # if bleach_box_size_batch: bleach_region_fraction_batch = np.arange(0.00, (1.00 + (bleach_box_size_batch[boxCount] / lengths[0]) + 0.01), 0.05) # the +0.01 is just to make np.arange take the final value
                                     for regionCount in range(len(bleach_region_fraction_batch)):
                                         # print(bleach_region_fraction_batch[regionCount] * lengths[0] / (lengths[0] + bleach_box_size_batch[boxCount]))
@@ -439,19 +490,24 @@ for shapeCount in range(len(shapes)):
                                         for particleCount in range(len(particles)):
                                             print(f"particle count index: {particleCount}")
                                             alpha_list = ([[],[],[]]) # to free up memory
-                                            contourLength = lengths[lengthCount]
+                                            # fig = plt.figure()
                                             time2 = time.time()
                                             ##########################Remember to change the internal radius-Df condition and the contour length stuff
-                                            saveTitle = (f"{shapeDict[shapes[shapeCount]]}, r= {sim_internal_radius}, L= {lengths[lengthCount]}, Df= {1 if lengths[lengthCount] <= 4 else diffusions[diffusionCount]}, "
+                                            saveTitle = (f"{shapeDict[shapes[shapeCount]]}, A={amplitudes[amplitudeCount]}, r= {sim_internal_radius}, L= {lengths[lengthCount]}, Df= {sim_D if lengths[lengthCount] <= 1 else diffusions[diffusionCount]}, "
                                                                     f"FR= {frameRates[frameIntervalCount]}, NP= {particles[particleCount]}")
+                                            # saveTitle = (f"{shapeDict[shapes[shapeCount]]}, r= {internal_radius_batch[radiusCount]}, L= {lengths[lengthCount]}, Df= {sim_D if contourLength <= 1 else diffusions[diffusionCount]}, "
+                                            #              f"FR= {frameRates[frameIntervalCount]}, NP= {particles[particleCount]}")
+                                            # fig = None
                                             for iterations in range(replicates):
+                                                
                                                 # print(f"{shapeDict[shapes[shapeCount]]} replicate: {iterations + 1}, box size: {bleach_box_size_batch[boxCount]}, bleach region: {bleach_region_fraction_batch[regionCount]}")
                                                 try:
+                                                    
                                               
-                                                    data, frap, times, pixels, profiles, fig = collect_data(shape= shapes[shapeCount], length = lengths[lengthCount], fast_diffusion_constant= 1 if lengths[lengthCount] <= 4 else diffusions[diffusionCount],
+                                                    data, frap, times, pixels, profiles, fig = collect_data(shape= shapes[shapeCount], length = lengths[lengthCount], fast_diffusion_constant= sim_D if lengths[lengthCount] <= 1 else diffusions[diffusionCount],
                                                                         frame_interval= frameRates[frameIntervalCount], numParticles= particles[particleCount],
                                                                         internal_radius= sim_internal_radius if shapes[shapeCount] !=0 else lengths[lengthCount] / 2,
-                                                                        simulated_seconds= math.ceil(contourLength**2*((3/4) if lengths[lengthCount] <= 4 else (2/3))/(2 *  (1 if lengths[lengthCount] <= 4 else diffusions[diffusionCount])) + 1),                                                                        
+                                                                        simulated_seconds= math.ceil(contourLength**2*((3/4) if lengths[lengthCount] <= 1 else (2/3))/(2 *  (sim_D if lengths[lengthCount] <= 1 else diffusions[diffusionCount])) + 1),                                                                        
                                                                         amplitude= amplitudes[amplitudeCount], pitch=pitches[pitchCount],
                                                                         bleach_region_fraction= bleach_region_fraction_batch[regionCount],
                                                                         bleach_box_scan_size= bleach_box_size_batch[boxCount] if bleach_box_size_batch else None,
@@ -463,7 +519,7 @@ for shapeCount in range(len(shapes)):
                                                     print("error")
                                                     # sys.exit()    
                             
-                                                fig.savefig(directory + saveTitle + f", replicate {iterations + 1}.jpeg", dpi = 300, bbox_inches = "tight")
+                                                fig.savefig(directory + saveTitle + f", replicate {iterations + 1}.png", dpi = 300, bbox_inches = "tight")
                                                 plt.close(fig)
                                                 alpha_list[0].append(float(re.findall("\d+\.\d+", data[0][0][0])[0]))
                                                 alpha_list[1].append(float(re.findall("\d+\.\d+", data[1][0][0])[0]))
