@@ -35,7 +35,7 @@ def COSINE_COLLAPSE_Model(x, I0, I_amplitude):
     return (I0 + (I_amplitude * np.cos(np.pi * x / cell_Length)))
 
 def MASTER_CURVE(cellType, analysisType, cell_Length, internal_radius, 𝜏):
-    sphere_Dict = {0: 0.0575, 2: 0.045}###Dictionary keys correspond to analysis type. 0 = bleach region analysis, 2 = Fourier Transform
+    sphere_Dict = {0: 0.0577, 2: 0.045}###Dictionary keys correspond to analysis type. 0 = bleach region analysis, 2 = Fourier Transform
     infinity_Dict = {0: 0.954, 2: 1}###Dictionary keys correspond to analysis type. 0 = bleach region analysis, 2 = Fourier Transform
     key = int(analysisType)
     aspect_Ratio = cell_Length / (internal_radius * 2)
@@ -47,7 +47,7 @@ def MASTER_CURVE(cellType, analysisType, cell_Length, internal_radius, 𝜏):
         cell_amplitude = 0.2
         cell_pitch = 2.5
 
-    D = (sphere_Dict[key] + ((infinity_Dict[key]/np.pi**2)*(1 + (2 * math.pi * cell_amplitude / cell_pitch)**2) - sphere_Dict[key]) * (1 - 1.689/aspect_Ratio + 0.3568/aspect_Ratio**2 + 0.3322/aspect_Ratio**3)) * (cell_Length**2 / 𝜏)
+    D = (sphere_Dict[key] + ((infinity_Dict[key]/np.pi**2)*(1 + (2 * math.pi * cell_amplitude / cell_pitch)**2) - sphere_Dict[key]) * (1 - 1.701/aspect_Ratio + 0.3918/aspect_Ratio**2 + 0.3092/aspect_Ratio**3)) * (cell_Length**2 / 𝜏)
     return D
 # B1(lc/L)^B2
 def extract_float(fileName):
