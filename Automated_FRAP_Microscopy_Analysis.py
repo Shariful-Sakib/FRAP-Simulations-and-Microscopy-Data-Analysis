@@ -386,12 +386,12 @@ function FRAP_DATA_EXTRACTION(directory)
 extensionList = ["czi"] #Zeiss files are accepted by default, users can add more when prompted
 colorMap = LinearSegmentedColormap.from_list('Black', ['red','aqua','black'])
 cell_Length = 0
-fileCount = 129
+fileCount = 0 #for skipping files if needed
 for folders in glob.iglob(directory, recursive= True):
     for extensions in extensionList:
         sorted_files = sorted(sorted(glob.iglob(folders + f'/**/*.{extensions}', recursive= True), key=extract_float))
-        # fileCount = 149 #for skipping
-        for files in (sorted_files[fileCount:130]):
+        # fileCount = number #for skipping files if needed
+        for files in (sorted_files[fileCount:]):
             dataDict = defaultdict(list); #makes a dictionary for metadata values
             macro_arguments = {"directory": files, "ID": fileCount, "BLEACH_REGION_ANALYSIS": BLEACH_REGION_ANALYSIS, "FOURIER_MODE_ANALYSIS": FOURIER_MODE_ANALYSIS} #dictionary of arguments sent to ImageJ macro.
             FRAPMacro = ij.py.run_macro(ImageJ_FRAP_Macro, macro_arguments)
